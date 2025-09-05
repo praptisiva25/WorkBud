@@ -1,7 +1,7 @@
 // src/app/api/me/sync/route.ts
 import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { upsertUser } from "@/server/users";
+import { upsertUser } from "../../../../server/users";
 
 export async function POST() {
   const { userId } = await auth();

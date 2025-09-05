@@ -55,11 +55,13 @@ export const threads = pgTable("threads", {
   id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
   type: threadType("type").default("user_chat").notNull(), // user_chat | group_chat | copilot
   title: text("title"),
+  dmKey: text("dm_key"),
   isArchived: boolean("is_archived").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   typeUpdatedIdx: index("threads_type_updated_idx").on(t.type, t.updatedAt),
+  dmKeyUidx: uniqueIndex("threads_dm_key_uidx").on(t.dmKey),
 }));
 
 export const threadParticipants = pgTable("thread_participants", {
