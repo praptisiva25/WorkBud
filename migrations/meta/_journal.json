@@ -15,6 +15,13 @@
       "when": 1757069803234,
       "tag": "0001_kind_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1757167657457,
+      "tag": "0002_slimy_guardsmen",
+      "breakpoints": true
     }
   ]
 }

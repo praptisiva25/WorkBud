@@ -36,21 +36,21 @@ export const users = pgTable("users", {
 /* ────────────────────────────────────────────────────────────────────────────
    AI CHAT HISTORY (agentic conversations; roles user/assistant/tool/system)
    ──────────────────────────────────────────────────────────────────────────── */
+// CHANGE: messages table — add sessionId + index
 export const messages = pgTable("messages", {
   id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  role: messageRole("role").notNull(),
+  sessionId: uuid("session_id").references(() => copilotSessions.id, { onDelete: "cascade" }), // NEW
+  role: messageRole("role").notNull(),               // 'user' | 'assistant' | 'tool' | 'system'
   content: text("content").notNull(),
   meta: jsonb("meta_json"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   userTimeIdx: index("messages_user_created_idx").on(t.userId, t.createdAt),
+  sessionTimeIdx: index("messages_session_created_idx").on(t.sessionId, t.createdAt), // NEW
 }));
 
-/* ────────────────────────────────────────────────────────────────────────────
-   HUMAN↔HUMAN CHAT (threads + participants + chat messages)
-   Copilot can WRITE into user threads (source='copilot'); READ rules enforced in API.
-   ──────────────────────────────────────────────────────────────────────────── */
+
 export const threads = pgTable("threads", {
   id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
   type: threadType("type").default("user_chat").notNull(), // user_chat | group_chat | copilot
@@ -248,3 +248,14 @@ export const agentRuns = pgTable("agent_runs", {
    NOTE: Enable pgcrypto once in your DB for gen_random_uuid():
    CREATE EXTENSION IF NOT EXISTS pgcrypto;
    ──────────────────────────────────────────────────────────────────────────── */
+
+   // NEW
+export const copilotSessions = pgTable("copilot_sessions", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title"),                    // optional: “Shopping list”, etc.
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  userCreatedIdx: index("copilot_sessions_user_created_idx").on(t.userId, t.createdAt),
+}));
