@@ -12,7 +12,7 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoaded && userId) router.push("/events");
+    if (isLoaded && userId) router.push("/dashboard");
   }, [isLoaded, userId, router]);
 
   if (!isLoaded) {
