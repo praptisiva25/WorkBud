@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { searchUsers } from "@/server/users";
+import { searchUsers } from "../../../../server/users";
 
 export async function GET(req: Request) {
   const { userId } = await auth();

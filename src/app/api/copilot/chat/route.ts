@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 const CopilotReminder = z.object({
   title: z.string().min(1).optional(),
   body: z.string().nullable().optional(),
-  dueAtUtc: z.string().min(1),              // ISO string
+  dueAtUtc: z.string().min(1),              
   sourceTz: z.string().min(1).default("UTC"),
   recurrenceRrule: z.string().nullable().optional(),
   channelPrefs: z.record(z.string(), z.any()).nullable().optional(),

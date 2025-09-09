@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { listMyThreads } from "@/server/thread";
+import { listMyThreads } from "../../../../server/thread";
 
 export async function GET(req: Request) {
   const { userId } = await auth();

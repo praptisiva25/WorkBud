@@ -29,7 +29,7 @@ export async function ensureDmThread(userA: string, userB: string) {
       )[0];
     }
 
-    // Ensure both participants exist (your schema already has unique(thread_id, user_id))
+    
     await tx
       .insert(schema.threadParticipants)
       .values([

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { ensureDmThread } from "@/server/thread";
+import { ensureDmThread } from "../../../../server/thread";
 
 export async function POST(req: Request) {
   const { userId } = await auth();
