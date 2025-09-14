@@ -1,121 +1,91 @@
-// src/app/api/copilot/chat/route.ts
-import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { z } from "zod";
-
-import { signForCopilot } from "@/server/jwt";
-import { getOrCreateCopilotSession, insertUserMsg, insertAssistantMsg } from "@/server/copilot";
 import { db } from "@/server/db";
 import * as s from "@/drizzle/schema";
-import { sql } from "drizzle-orm";
-
-// Validate Copilot payload
-const CopilotReminder = z.object({
-  title: z.string().min(1).optional(),
-  body: z.string().nullable().optional(),
-  dueAtUtc: z.string().min(1),              
-  sourceTz: z.string().min(1).default("UTC"),
-  recurrenceRrule: z.string().nullable().optional(),
-  channelPrefs: z.record(z.string(), z.any()).nullable().optional(),
-});
+import { getOrCreateCopilotSession } from "@/server/copilot";
+import { signForCopilot } from "@/server/jwt"; // ok if you have it; we fall back if it fails
 
 export async function POST(req: Request) {
-  // Allow dev testing without a Clerk session
+  // 0) read input
+  const { text } = await req.json().catch(() => ({ text: "" }));
+  const content = (text ?? "").toString().trim();
+  if (!content) {
+    return new Response("missing text", { status: 400, headers: { "Content-Type": "text/plain" } });
+  }
+
+  // 1) identify user (Clerk or dev header)
   const devUserHeader = req.headers.get("x-user-id")?.trim() || null;
   const { userId: clerkUser } = await auth();
   const userId = clerkUser || devUserHeader;
-
   if (!userId) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-  }
-
-  const body = await req.json().catch(() => ({} as any));
-  const text: string | undefined = body?.text;
-
-  if (!text || !text.trim()) {
-    return NextResponse.json({ error: "text is required" }, { status: 400 });
+    return new Response("unauthenticated", { status: 401, headers: { "Content-Type": "text/plain" } });
   }
 
   try {
-    // 1) Ensure a personal Copilot session (separate from human↔human threads)
+    // 2) ensure personal Copilot session
     const session = await getOrCreateCopilotSession(userId);
 
-    // 2) Store the user's message into copilot_messages
-    const userMsg = await insertUserMsg(userId, session.id, text.trim());
-
-    // 3) Call Copilot with a Next-signed EdDSA JWT
-    const token = await signForCopilot({ sub: userId, sessionId: session.id, scope: "reminders:create" });
-    const copilotUrl = process.env.COPILOT_SERVICE_URL || "http://localhost:8000";
-
-    const copilotRes = await fetch(`${copilotUrl}/act`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        userId,
-        sessionId: session.id,
-        text: text.trim(),
-        sourceTz: body?.sourceTz || "Asia/Kolkata",
-      }),
-    });
-
-    const raw = await copilotRes.text();
-    let json: any;
-    try { json = JSON.parse(raw); } catch { json = { raw }; }
-
-    if (!copilotRes.ok) {
-      // Surface copilot’s error for quicker debugging
-      return NextResponse.json(
-        { error: "copilot failed", status: copilotRes.status, detail: json },
-        { status: 502 },
-      );
-    }
-
-    // 4) Validate & normalize the Copilot response
-    const structured = CopilotReminder.parse(json);
-
-    // Parse and ensure Date is valid
-    const due = new Date(structured.dueAtUtc);
-    if (Number.isNaN(due.getTime())) {
-      return NextResponse.json({ error: "invalid dueAtUtc from copilot" }, { status: 502 });
-    }
-
-    // 5) Insert reminder
-    const [rem] = await db
-      .insert(s.reminders)
-      .values({
-        id: sql`gen_random_uuid()`,
-        userId,
-        title: structured.title ?? "Reminder",
-        body: structured.body ?? null,
-        dueAtUtc: due,
-        sourceTz: structured.sourceTz ?? "UTC",
-        status: "scheduled",
-        recurrenceRrule: structured.recurrenceRrule ?? null,
-        channelPrefs: structured.channelPrefs ?? null,
-        sourceMessageId: userMsg.id,
-      })
-      .returning();
-
-    // 6) Store assistant confirmation in copilot_messages
-    const humanTime = new Date(rem.dueAtUtc as unknown as string).toLocaleString("en-IN", {
-      timeZone: structured.sourceTz ?? "Asia/Kolkata",
-    });
-
-    const reply = `✅ Reminder set: ${rem.title} — ${humanTime} (${structured.sourceTz ?? "UTC"})`;
-    const assistantMsg = await insertAssistantMsg(userId, session.id, reply, { reminderId: rem.id });
-
-    return NextResponse.json({
-      ok: true,
+    // 3) append USER message immediately
+    await db.insert(s.messages).values({
+      userId,
       sessionId: session.id,
-      reminder: rem,
-      assistantMsg,
+      role: "user",
+      content,
+      // meta_json left NULL intentionally
+    });
+
+    // 4) call workbud_copilot -> plain-text reply (first letter)
+    const copilotUrl = process.env.COPILOT_SERVICE_URL || "http://localhost:8000";
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    // add JWT if your FastAPI expects it (safe to try)
+    try {
+      const token = await signForCopilot({ sub: userId, sessionId: session.id, scope: "chat:echo" });
+      headers.Authorization = `Bearer ${token}`;
+    } catch {
+      // ok — your FastAPI can run with JWT disabled
+    }
+
+    const r = await fetch(`${copilotUrl}/act`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ text: content }),
+    });
+
+    const reply = await r.text(); // FastAPI returns plain text
+    const ok = r.ok;
+
+    // 5) append ASSISTANT message (reply or error text)
+    await db.insert(s.messages).values({
+      userId,
+      sessionId: session.id,
+      role: "assistant",
+      content: reply || (ok ? "(empty)" : `Error: ${reply || `HTTP ${r.status}`}`),
+      meta: ok ? null : ({ httpStatus: r.status } as any),
+    });
+
+    // 6) return plain text to the UI
+    return new Response(reply, {
+      status: ok ? 200 : 502,
+      headers: { "Content-Type": "text/plain" },
     });
   } catch (e: any) {
-    // Log server-side for diagnosis; keep response tidy
-    console.error("[/api/copilot/chat] error:", e);
-    return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
+    const errText = e?.message || "server error";
+
+    // best effort: also append an assistant error bubble
+    try {
+      const { userId: clerkUser2 } = await auth();
+      const user2 = clerkUser2 || devUserHeader;
+      if (user2) {
+        const session = await getOrCreateCopilotSession(user2);
+        await db.insert(s.messages).values({
+          userId: user2,
+          sessionId: session.id,
+          role: "assistant",
+          content: `Error: ${errText}`,
+          meta: { error: errText } as any,
+        });
+      }
+    } catch { /* ignore */ }
+
+    return new Response(errText, { status: 500, headers: { "Content-Type": "text/plain" } });
   }
 }

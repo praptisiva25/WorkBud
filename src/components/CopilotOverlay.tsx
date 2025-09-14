@@ -23,36 +23,65 @@ export default function CopilotOverlay({
   const [isGenerating, setIsGenerating] = useState(false);
   const [items, setItems] = useState<LocalMsg[]>([
     { id: "s1", role: "system", text: "Welcome to WorkBud.", time: timeStr() },
-    {
-      id: "a1",
-      role: "assistant",
-      text: "What should I include in the standup note?",
-      time: timeStr(),
-    },
+    { id: "a1", role: "assistant", text: "What should I include in the standup note?", time: timeStr() },
   ]);
   const listRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    listRef.current?.scrollTo({
-      top: listRef.current.scrollHeight,
-      behavior: "smooth",
-    });
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [items.length]);
 
-  const send = () => {
+  // Minimal echo: POST {text} -> /api/copilot/chat, expect PLAIN TEXT reply
+  const send = async () => {
     const content = input.trim();
     if (!content || isGenerating) return;
-    setInput("");
+
+    // optimistic user bubble
     const now = timeStr();
+    setInput("");
     setItems((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: content, time: now }]);
     setIsGenerating(true);
-    setTimeout(() => {
+
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    try {
+      const res = await fetch("/api/copilot/chat", {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: {
+          "Content-Type": "application/json",
+          // "x-user-id": "dev-123", // <- uncomment if testing without Clerk auth
+        },
+        body: JSON.stringify({ text: content }),
+      });
+
+      const reply = await res.text(); // plain text from FastAPI
+      if (!res.ok) throw new Error(reply || `HTTP ${res.status}`);
+
       setItems((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "assistant", text: "On it! I'll handle that.", time: timeStr() },
+        { id: crypto.randomUUID(), role: "assistant", text: reply || "(empty)", time: timeStr() },
       ]);
+    } catch (e: any) {
+      const msg =
+        e?.name === "AbortError"
+          ? "⏹️ Request cancelled."
+          : `Error: ${e?.message || String(e)}`;
+      setItems((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "assistant", text: msg, time: timeStr() },
+      ]);
+    } finally {
       setIsGenerating(false);
-    }, 900);
+      abortRef.current = null;
+    }
+  };
+
+  const stop = () => {
+    abortRef.current?.abort();
+    setIsGenerating(false);
   };
 
   return (
@@ -67,11 +96,7 @@ export default function CopilotOverlay({
             Standup notes • <span className="text-slate-300">Welcome to WorkBud</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setPinned(!pinned)}
-              className="p-1.5 rounded-md hover:bg-white/10"
-              title={pinned ? "Unpin" : "Pin"}
-            >
+            <button onClick={() => setPinned(!pinned)} className="p-1.5 rounded-md hover:bg-white/10" title={pinned ? "Unpin" : "Pin"}>
               {pinned ? <PinOff className="h-4 w-4 text-slate-300" /> : <Pin className="h-4 w-4 text-slate-300" />}
             </button>
             <button onClick={onClose} className="p-1.5 rounded-md hover:bg-white/10" title="Close">
@@ -127,21 +152,15 @@ export default function CopilotOverlay({
                   send();
                 }
               }}
-              placeholder="Ask to schedule, remind, or summarize…"
+              placeholder="Type a message for Copilot…"
               className="min-h-[44px] max-h-40 flex-1 resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-transparent"
             />
             {isGenerating ? (
-              <button
-                onClick={() => setIsGenerating(false)}
-                className="px-4 py-2 bg-gradient-to-r from-violet-500 to-cyan-400 text-slate-950 font-medium hover:from-violet-600 hover:to-cyan-500 rounded-lg flex items-center gap-2"
-              >
+              <button onClick={stop} className="px-4 py-2 bg-gradient-to-r from-violet-500 to-cyan-400 text-slate-950 font-medium hover:from-violet-600 hover:to-cyan-500 rounded-lg flex items-center gap-2">
                 <StopCircle className="h-4 w-4" /> Stop
               </button>
             ) : (
-              <button
-                onClick={send}
-                className="px-4 py-2 bg-gradient-to-r from-violet-500 to-cyan-400 text-slate-950 font-medium hover:from-violet-600 hover:to-cyan-500 rounded-lg flex items-center gap-2"
-              >
+              <button onClick={send} className="px-4 py-2 bg-gradient-to-r from-violet-500 to-cyan-400 text-slate-950 font-medium hover:from-violet-600 hover:to-cyan-500 rounded-lg flex items-center gap-2" disabled={!input.trim()}>
                 <Send className="h-4 w-4" /> Send
               </button>
             )}

@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Sparkles, MessageSquareText, User } from "lucide-react";
-import SidebarThreads from "@/components/SidebarThreads";
-import ThreadClient from "@/components/ThreadClient";
-import CopilotOverlay from "@/components/CopilotOverlay";
-import type { Thread } from "@/types/chat";
+import SidebarThreads from "../../components/SidebarThreads";
+import ThreadClient from "../../components/ThreadClient";
+import CopilotOverlay from "../../components/CopilotOverlay";
+import type { Thread } from "../../types/chat";
 import { UserButton } from "@clerk/nextjs";
 
 export default function ChatPage() {
@@ -17,7 +17,7 @@ export default function ChatPage() {
     setLoadingThreads(true);
     const r = await fetch("/api/threads/list");
     const j = await r.json();
-    const items: Thread[] = (j.items || []).filter((t: Thread) => t.type !== "copilot"); // sidebar only user/group
+    const items: Thread[] = (j.items || []).filter((t: Thread) => t.type !== "copilot"); 
     setThreads(items);
     setLoadingThreads(false);
     if (!activeThreadId && items.length) setActiveThreadId(items[0].id);
