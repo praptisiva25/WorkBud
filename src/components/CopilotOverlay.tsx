@@ -45,6 +45,9 @@ export default function CopilotOverlay({
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    const sourceTz = Intl.DateTimeFormat().resolvedOptions().timeZone; // e.g., "Asia/Kolkata"
+    const nowIso   = new Date().toISOString();   
+    const todayLocal = new Date().toLocaleDateString("en-CA", { timeZone: sourceTz });
 
     try {
       const res = await fetch("/api/copilot/chat", {
@@ -54,7 +57,11 @@ export default function CopilotOverlay({
           "Content-Type": "application/json",
           // "x-user-id": "dev-123", // <- uncomment if testing without Clerk auth
         },
-        body: JSON.stringify({ text: content }),
+        body: JSON.stringify({ text: content,
+          sourceTz,   
+          nowIso,  
+          todayLocal,
+         }),
       });
 
       const reply = await res.text(); // plain text from FastAPI
