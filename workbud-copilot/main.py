@@ -2,6 +2,7 @@ import os, json, re, asyncio, requests
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from vectorize import router as vectorize_router
 
 from jwcrypto import jwk, jwt
 from dotenv import load_dotenv
@@ -73,6 +74,8 @@ app.add_middleware(
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
+
+app.include_router(vectorize_router)
 
 @app.get("/health")
 def health():
