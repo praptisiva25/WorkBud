@@ -56,7 +56,7 @@ async def llm_pick_tool(message: str) -> str:
         f"User: {message}"
     )
     body = {"model": GROQ_MODEL, "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0, "max_tokens": 5}
+            "temperature": 0, "max_tokens": 100}
     try:
         resp = await asyncio.to_thread(requests.post, GROQ_URL, headers=HEADERS, json=body, timeout=10)
         resp.raise_for_status()
@@ -118,7 +118,7 @@ async def act(request: Request):
             message=text, user_id=user_id, source_tz=source_tz, now_iso=now_iso, today_local=today_local,
             groq_url=GROQ_URL, groq_model=GROQ_MODEL, headers=HEADERS,
         )
-        reply    = (out.get("reply") or "").strip() or "✅ Reminder captured."
+        reply    = (out.get("reply") or "").strip() or " Reminder captured."
         reminder = out.get("reminder") or {}
         return JSONResponse({"reply": reply, "intent": "reminder", "reminder": reminder},
                             headers={"X-Intent": "reminder"})
