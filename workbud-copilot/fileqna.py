@@ -1,5 +1,6 @@
 import os, asyncio, requests
 from typing import Any, List
+import re
 
 # expects a LangChain retriever (or None)
 
@@ -34,7 +35,7 @@ async def fileqna_agent(
 
     sys = (
         "Answer strictly from the provided context. If the answer is not clearly supported, say "
-        "'I couldn’t find this in the documents.' Cite sources using [1], [2] indices."
+        "'I couldn’t find this in the documents."
     )
     user = f"Question:\n{query}\n\nContext:\n{context}"
 
@@ -49,6 +50,7 @@ async def fileqna_agent(
         resp = await asyncio.to_thread(requests.post, groq_url, headers=headers, json=body, timeout=25)
         resp.raise_for_status()
         answer = (resp.json()["choices"][0]["message"]["content"] or "").strip()
+        answer = re.sub(r"\s*\[\d+\]\s*", " ", answer).strip()
         return {"reply": answer, "sources": sources}
     except Exception as e:
         return {"reply": f"RAG answer failed: {e}", "sources": sources}

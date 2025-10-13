@@ -11,7 +11,7 @@ import { sql } from "drizzle-orm";
    ──────────────────────────────────────────────────────────────────────────── */
 export const messageRole = pgEnum("message_role", ["user", "assistant", "tool", "system"]); // AI chat roles
 export const intentEnum = pgEnum("intent", ["note", "event", "reminder", "query", "other"]);
-export const reminderStatus = pgEnum("reminder_status", ["scheduled", "sent", "snoozed", "done", "failed"]);
+export const reminderStatus = pgEnum("reminder_status", ["scheduled", "processing", "sent", "snoozed", "done", "failed"]);
 export const providerEnum = pgEnum("oauth_provider", ["google"]);
 export const refTypeEnum = pgEnum("ref_type", ["note", "message"]);
 
