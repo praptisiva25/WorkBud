@@ -4,6 +4,9 @@ import "./globals.css"
 import { cn } from "../lib/utils"
 import { ClerkProvider } from "@clerk/nextjs"
 import SyncMe from "../components/SyncMe";
+import ReminderToaster from "../components/ReminderToaster";
+import ReminderPuller from "../components/ReminderPuller";
+
 
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
@@ -28,6 +31,7 @@ export default function RootLayout({
           )}
         >
           <SyncMe />
+           <ReminderPuller />
           {children}
         </body>
       </html>

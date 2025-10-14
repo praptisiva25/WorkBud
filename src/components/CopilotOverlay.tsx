@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, Mic, Send, StopCircle, Pin, PinOff, X } from "lucide-react";
+import { Paperclip, Mic, Send, StopCircle, Pin, PinOff, X, Shield } from "lucide-react"; // ⬅️ add Shield
 
 type LocalMsg = {
   id: string;
@@ -51,13 +51,18 @@ export default function CopilotOverlay({
 
   const listRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Existing vector upload input
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // NEW: PII masking upload input
+  const piiInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [items.length]);
 
   const openFilePicker = () => fileInputRef.current?.click();
+  const openPiiPicker = () => piiInputRef.current?.click(); // NEW
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -133,6 +138,67 @@ export default function CopilotOverlay({
       ]);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // NEW: PII masking upload flow
+  const handlePiiFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const now = timeStr();
+
+    // show uploading bubble
+    setItems((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        text: `🔒 Uploading for masking: ${file.name} (${formatBytes(file.size)})`,
+        time: now,
+      },
+    ]);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("source", "pii-masking");
+
+      const res = await fetch("/api/copilot/pii-upload", { method: "POST", body: fd });
+      const payload = await (async () => {
+        try {
+          return await res.json();
+        } catch {
+          return await res.text();
+        }
+      })();
+
+      if (!res.ok) throw new Error(typeof payload === "string" ? payload : payload?.error || `HTTP ${res.status}`);
+
+      const fileUrl = typeof payload === "object" ? payload.fileUrl : undefined;
+      const serverMsg = typeof payload === "object" ? payload.message || "PII document saved." : String(payload);
+
+      setItems((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text:
+            `✅ 🔒 PII doc **${file.name}** received.${fileUrl ? `\n\nLink: ${fileUrl}` : ""}\n\n${serverMsg}\n\n` +
+            `Next: “mask email”, “mask phone”, “mask name”, etc.`,
+          time: timeStr(),
+        },
+      ]);
+
+      // (Optional) kick off an async OCR/index step later if you want
+      // await fetch("/api/copilot/pii-init", { method: "POST", body: JSON.stringify({ fileUrl }), headers: { "Content-Type": "application/json" } });
+    } catch (err: any) {
+      setItems((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "assistant", text: `❌ PII upload error: ${err.message}`, time: timeStr() },
+      ]);
+    } finally {
+      if (piiInputRef.current) piiInputRef.current.value = "";
     }
   };
 
@@ -227,13 +293,28 @@ export default function CopilotOverlay({
         {/* Composer */}
         <div className="border-t border-white/10 bg-slate-900/70 backdrop-blur px-5 py-4 rounded-b-2xl">
           <div className="mx-auto flex items-end gap-3">
+            {/* Existing vector upload */}
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} />
-            <button onClick={openFilePicker} className="p-2 border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10 rounded-lg">
+            <button onClick={openFilePicker} className="p-2 border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10 rounded-lg" title="Upload & vectorize">
               <Paperclip className="h-4 w-4" />
             </button>
+
+            {/* NEW: PII masking upload */}
+            <input
+              ref={piiInputRef}
+              type="file"
+              className="hidden"
+              onChange={handlePiiFileChange}
+              accept=".png,.jpg,.jpeg,.webp,.pdf,.tiff,.bmp,.txt,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv"
+            />
+            <button onClick={openPiiPicker} className="p-2 border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10 rounded-lg" title="Upload for PII masking">
+              <Shield className="h-4 w-4" />
+            </button>
+
             <button className="p-2 border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10 rounded-lg">
               <Mic className="h-4 w-4" />
             </button>
+
             <textarea
               rows={1}
               value={input}

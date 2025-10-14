@@ -3,6 +3,10 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+import redis.asyncio as redis
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+HIST_MAX_TURNS = int(os.getenv("HIST_MAX_TURNS", "20"))
 
 from reminder_agent import reminder_agent
 from fileqna import fileqna_agent
@@ -10,6 +14,7 @@ from chart_agent import chart_agent
 from message_agent import message_agent  
 from vectorize import router as vectorize_router
 from retriever import load_retriever 
+from maskslm_agent import maskslm_agent
 # --- Environment setup ---
 from dotenv import load_dotenv
 load_dotenv()
@@ -48,6 +53,7 @@ async def llm_pick_tool(message: str) -> str:
         "- fileqna (for answering questions that do not say to message , reminder or make chart )\n"
         "- chart (for charts, plots, or graphs)\n"
         "- message (for sending a message to someone)\n"
+        "- masking (for PII masking like name, email, phone, application number)\n"
         "Output ONLY: reminder OR fileqna OR chart OR message.\n\n"
         f"User: {message}"
     )
@@ -55,14 +61,14 @@ async def llm_pick_tool(message: str) -> str:
         "model": GROQ_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
-        "max_tokens": 50,
+        "max_tokens": 200,
     }
     try:
         resp = await asyncio.to_thread(requests.post, GROQ_URL, headers=HEADERS, json=body, timeout=10)
         resp.raise_for_status()
         choice = (resp.json()["choices"][0]["message"]["content"] or "").strip().lower()
         choice = re.sub(r"[^a-z]", "", choice)
-        if choice in ("reminder", "fileqna", "chart", "message"):
+        if choice in ("reminder", "fileqna", "chart", "message","masking"):
             return choice
     except Exception:
         pass
@@ -75,6 +81,8 @@ async def llm_pick_tool(message: str) -> str:
         return "chart"
     if any(k in t for k in ["send", "message", "text", "dm"]):
         return "message"
+    if any(k in t for k in ["mask", "redact", "blur", "pii", "hide", "anonymiz", "blackout"]):
+        return "masking"
     return "fileqna"
 
 # --- Main /act route ---
@@ -125,7 +133,25 @@ async def act(request: Request):
         )
             code = 200 if out.get("ok") else 400
             return JSONResponse({"intent": "message", **out}, status_code=code, headers={"X-Intent": "message"})
-    
+        
+        elif intent == "masking":
+            # Expect ocr TXT path from frontend (saved by masking_agent earlier)
+            #txt_path = body.get("txt_path") or body.get("ocr_txt_path")
+            txt_path = r"D:\projects\The one u want botany\workbud\workbud-copilot\ocr\27e72b17-7456-4d08-a8f5-b6d8a2101055__vit_2025_26_tuition_fees.pdf.txt"
+
+            if not txt_path:
+                raise HTTPException(status_code=400, detail="Missing txt_path (OCR slim TXT)")
+
+            out = await maskslm_agent(
+                user_prompt=text,
+                txt_path=txt_path,
+                groq_url=GROQ_URL,
+                groq_model=GROQ_MODEL,
+                headers=HEADERS,
+            )
+            # out = { ok, reply, targets:[{value,bbox}], raw }
+            code = 200 if out.get("ok") else 500
+            return JSONResponse({"intent": "masking", **out}, status_code=code, headers={"X-Intent": "masking"})
 
         # === Default: File QnA ===
         out = await fileqna_agent(
@@ -133,6 +159,8 @@ async def act(request: Request):
             groq_url=GROQ_URL, groq_model=GROQ_MODEL, headers=HEADERS
         )
         return JSONResponse({"reply": out["reply"], "intent": "fileqna"})
+        
+        
 
     except Exception as e:
         print(f"❌ Error in /act: {e}")

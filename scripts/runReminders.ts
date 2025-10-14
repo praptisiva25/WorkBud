@@ -5,11 +5,28 @@ import * as s from "../src/drizzle/schema";
 import { and, eq, lte } from "drizzle-orm";
 
 async function deliver(rem: typeof s.reminders.$inferSelect) {
-  
   console.log(
     `🔔 Reminder fired for user=${rem.userId} | ${rem.title} | ${rem.body ?? ""} | due=${rem.dueAtUtc.toISOString()}`
   );
+
+  await fetch(process.env.APP_BASE_URL! + "/api/notify-user", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-runner-secret": process.env.RUNNER_NOTIFY_SECRET || "",
+    },
+    body: JSON.stringify({
+      userId: rem.userId,
+      title: rem.title ?? "Reminder",
+      body: rem.body ?? "",
+      dueAtUtc:
+        rem.dueAtUtc instanceof Date
+          ? rem.dueAtUtc.toISOString()
+          : String(rem.dueAtUtc),
+    }),
+  });
 }
+
 
 async function tick() {
   const now = new Date(); 
