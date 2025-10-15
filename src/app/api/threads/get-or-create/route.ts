@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
   const dmKey = makeDmKey(userId, otherId);
 
-  // check if thread already exists
+  
   const existing = await db
     .select()
     .from(schema.threads)
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ thread: existing[0] });
   }
 
-  // otherwise create a new thread + participants
+  
   const [thread] = await db
     .insert(schema.threads)
     .values({

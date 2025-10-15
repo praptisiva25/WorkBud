@@ -9,7 +9,7 @@ type Reminder = {
   userId: string;
   title: string | null;
   body: string | null;
-  dueAtUtc: string;   // timestamptz
+  dueAtUtc: string;   
   status: "scheduled" | "processing" | "sent";
   sourceTz?: string | null;
 };

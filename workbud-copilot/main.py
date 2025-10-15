@@ -15,17 +15,17 @@ from message_agent import message_agent
 from vectorize import router as vectorize_router
 from retriever import load_retriever 
 from maskslm_agent import maskslm_agent
-# --- Environment setup ---
+
 from dotenv import load_dotenv
 load_dotenv()
 
-# --- Groq setup ---
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
 HEADERS      = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
 
-# --- FastAPI setup ---
+
 app = FastAPI(title="WorkBud Copilot")
 app.add_middleware(
     CORSMiddleware,
@@ -33,7 +33,7 @@ app.add_middleware(
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
-# Static serving
+
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(vectorize_router)
@@ -42,10 +42,9 @@ app.include_router(vectorize_router)
 def health():
     return {"ok": True, "model": GROQ_MODEL}
 
-RETRIEVER = load_retriever(path="faiss_index")  # returns None if index not found
+RETRIEVER = load_retriever(path="faiss_index")  
 
 
-# --- Simple tool classifier ---
 async def llm_pick_tool(message: str) -> str:
     prompt = (
         "Choose ONLY one tool for the user message:\n"
@@ -85,7 +84,7 @@ async def llm_pick_tool(message: str) -> str:
         return "masking"
     return "fileqna"
 
-# --- Main /act route ---
+
 @app.post("/act")
 async def act(request: Request):
     body = await request.json()
@@ -93,18 +92,18 @@ async def act(request: Request):
     if not text:
         raise HTTPException(status_code=400, detail="Missing text")
 
-    # ✅ Use explicit user_id or fallback
+    
     user_id = body.get("user_id") or "anonymous"
     source_tz = body.get("source_tz") or "UTC"
     now_iso = body.get("now_iso") or ""
     today_local = body.get("today_local") or ""
     history = body.get("history") or []
 
-    print(f"✅ /act request from {user_id}: {text}")
+    print(f" /act request from {user_id}: {text}")
 
     # --- Tool selection ---
     intent = await llm_pick_tool(text)
-    print(f"🔍 Detected intent: {intent}")
+    print(f" Detected intent: {intent}")
 
     try:
         # === Reminder ===
@@ -145,6 +144,7 @@ async def act(request: Request):
             out = await maskslm_agent(
                 user_prompt=text,
                 txt_path=txt_path,
+                image_path="D:\\projects\\The one u want botany\\workbud\\public\\uploads\\pii\\29311772-a4db-493b-853d-7b20ff4e636a__fees.png",
                 groq_url=GROQ_URL,
                 groq_model=GROQ_MODEL,
                 headers=HEADERS,
@@ -153,7 +153,7 @@ async def act(request: Request):
             code = 200 if out.get("ok") else 500
             return JSONResponse({"intent": "masking", **out}, status_code=code, headers={"X-Intent": "masking"})
 
-        # === Default: File QnA ===
+     
         out = await fileqna_agent(
             query=text, history=history, retriever=RETRIEVER,
             groq_url=GROQ_URL, groq_model=GROQ_MODEL, headers=HEADERS
@@ -163,5 +163,5 @@ async def act(request: Request):
         
 
     except Exception as e:
-        print(f"❌ Error in /act: {e}")
+        print(f" Error in /act: {e}")
         return JSONResponse({"reply": f"Error: {str(e)}"}, status_code=500)

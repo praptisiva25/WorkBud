@@ -154,8 +154,8 @@ export async function POST(req: Request) {
           const pretty =
             (participantsByThread[matched.id]?.find((p) => p.userId !== userId)?.displayName) || receiver;
 
-          console.log("✅ Sent message", mrow?.id, "to thread", matched.id);
-          reply = `✅ Sent to ${pretty}: ${msgContent}`;
+          console.log(" Sent message", mrow?.id, "to thread", matched.id);
+          reply = ` Sent to ${pretty}: ${msgContent}`;
         }
       }
 
@@ -220,7 +220,7 @@ if (intent === "reminder" && reminder) {
     // If LLM didn’t return a reply, provide a nice default
     if (!reply) {
       const when = new Date(due).toLocaleString();
-      reply = `✅ Reminder scheduled for ${when} (${sourceTzNorm}).`;
+      reply = ` Reminder scheduled for ${when} (${sourceTzNorm}).`;
     }
   }
 }

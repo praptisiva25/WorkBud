@@ -52,9 +52,9 @@ export default function CopilotOverlay({
   const listRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Existing vector upload input
+  
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  // NEW: PII masking upload input
+  
   const piiInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function CopilotOverlay({
 
     const now = timeStr();
 
-    // show uploading bubble
+    
     setItems((prev) => [
       ...prev,
       {
@@ -106,15 +106,15 @@ export default function CopilotOverlay({
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: `✅ Uploaded **${file.name}**${fileUrl ? `\n\nLink: ${fileUrl}` : ""}\n\n${serverMsg}`,
+          text: ` Uploaded **${file.name}**${fileUrl ? `\n\nLink: ${fileUrl}` : ""}\n\n${serverMsg}`,
           time: timeStr(),
         },
       ]);
 
-      // 2) Vectorize immediately via backend
+      
       setItems((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "assistant", text: `🧠 Vectorizing **${file.name}**…`, time: timeStr() },
+        { id: crypto.randomUUID(), role: "assistant", text: ` Vectorizing **${file.name}**…`, time: timeStr() },
       ]);
 
       const vecResult = await vectorizeFile(file, payload);
@@ -124,7 +124,7 @@ export default function CopilotOverlay({
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            text: `✨ ${vecResult.detail}`,
+            text: ` ${vecResult.detail}`,
             time: timeStr(),
           },
         ]);
@@ -134,7 +134,7 @@ export default function CopilotOverlay({
     } catch (err: any) {
       setItems((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "assistant", text: `❌ Upload/Vectorize error: ${err.message}`, time: timeStr() },
+        { id: crypto.randomUUID(), role: "assistant", text: ` Upload/Vectorize error: ${err.message}`, time: timeStr() },
       ]);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -154,7 +154,7 @@ export default function CopilotOverlay({
       {
         id: crypto.randomUUID(),
         role: "user",
-        text: `🔒 Uploading for masking: ${file.name} (${formatBytes(file.size)})`,
+        text: ` Uploading for masking: ${file.name} (${formatBytes(file.size)})`,
         time: now,
       },
     ]);
@@ -184,7 +184,7 @@ export default function CopilotOverlay({
           id: crypto.randomUUID(),
           role: "assistant",
           text:
-            `✅ 🔒 PII doc **${file.name}** received.${fileUrl ? `\n\nLink: ${fileUrl}` : ""}\n\n${serverMsg}\n\n` +
+            `  PII doc **${file.name}** received.${fileUrl ? `\n\nLink: ${fileUrl}` : ""}\n\n${serverMsg}\n\n` +
             `Next: “mask email”, “mask phone”, “mask name”, etc.`,
           time: timeStr(),
         },
@@ -225,13 +225,16 @@ export default function CopilotOverlay({
         body: JSON.stringify({ text: content, sourceTz, nowIso, todayLocal }),
       });
 
-      const reply = await res.text();
-      if (!res.ok) throw new Error(reply || `HTTP ${res.status}`);
+      const data = await res.json();
+if (!res.ok) throw new Error(data?.reply || `HTTP ${res.status}`);
 
-      setItems((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "assistant", text: reply || "(empty)", time: timeStr() },
-      ]);
+const reply = data.reply || "(empty)";
+
+setItems((prev) => [
+  ...prev,
+  { id: crypto.randomUUID(), role: "assistant", text: reply, time: timeStr() },
+]);
+
     } catch (e: any) {
       const msg = e?.name === "AbortError" ? "⏹️ Request cancelled." : `Error: ${e?.message || String(e)}`;
       setItems((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", text: msg, time: timeStr() }]);
