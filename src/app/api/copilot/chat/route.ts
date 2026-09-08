@@ -1,5 +1,3 @@
-// src/app/api/copilot/chat/route.ts
-
 import { auth } from "@clerk/nextjs/server";
 import { db } from "../../../../server/db";
 import * as s from "../../../../drizzle/schema";
@@ -22,8 +20,6 @@ export async function POST(req: Request) {
     });
   }
 
-  // Clerk authentication
-  // Fallback header is allowed for local development
   const devUserHeader = req.headers.get("x-user-id")?.trim() || null;
   const { userId: clerkUser } = await auth();
   const userId = clerkUser || devUserHeader;
@@ -36,15 +32,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    // ============================================================
-    // 1. ENSURE COPILOT SESSION
-    // ============================================================
-
     const session = await getOrCreateCopilotSession(userId);
-
-    // ============================================================
-    // 2. SAVE USER MESSAGE
-    // ============================================================
 
     const [userMsg] = await db
       .insert(s.messages)
@@ -55,10 +43,6 @@ export async function POST(req: Request) {
         content,
       })
       .returning({ id: s.messages.id });
-
-    // ============================================================
-    // 3. CALL FASTAPI COPILOT
-    // ============================================================
 
     const copilotUrl =
       process.env.COPILOT_SERVICE_URL || "http://localhost:8000";
@@ -75,9 +59,7 @@ export async function POST(req: Request) {
       });
 
       headers.Authorization = `Bearer ${token}`;
-    } catch {
-      // JWT not configured - continue without it
-    }
+    } catch {}
 
     const r = await fetch(`${copilotUrl}/act`, {
       method: "POST",
@@ -93,9 +75,6 @@ export async function POST(req: Request) {
       }),
     });
 
-    // IMPORTANT:
-    // Read the response body exactly once.
-    // This prevents "Body is unusable: Body has already been read".
     const ok = r.ok;
     const raw = await r.text();
 
@@ -113,9 +92,7 @@ export async function POST(req: Request) {
     let intent: string | null = data.intent ?? null;
     let reminder: any = data.reminder ?? null;
 
-    // ============================================================
-    // 4. SEND MESSAGE
-    // ============================================================
+    console.log("REMINDER DATA:", JSON.stringify(reminder, null, 2));
 
     if (
       intent === "message" &&
@@ -125,25 +102,10 @@ export async function POST(req: Request) {
       const receiver = data.receiver.toString().trim();
       const msgContent = data.content.toString().trim();
 
-      console.log("🔎 Extracted receiver:", receiver);
-      console.log("💬 Message content:", msgContent);
-
-      // ----------------------------------------------------------
-      // Load all active threads
-      // ----------------------------------------------------------
-
       const myThreads = await db
         .select()
         .from(s.threads)
         .where(eq(s.threads.isArchived, false));
-
-      if (!myThreads.length) {
-        console.log("❌ No threads found.");
-      }
-
-      // ----------------------------------------------------------
-      // Load participants for these threads
-      // ----------------------------------------------------------
 
       const threadIds = myThreads.map((t) => t.id);
 
@@ -168,10 +130,6 @@ export async function POST(req: Request) {
             )
         : [];
 
-      // ----------------------------------------------------------
-      // Index participants by thread
-      // ----------------------------------------------------------
-
       const participantsByThread: Record<
         string,
         Array<{
@@ -189,59 +147,26 @@ export async function POST(req: Request) {
         });
       }
 
-      // ----------------------------------------------------------
-      // IMPORTANT:
-      // Only consider threads where CURRENT USER is a participant
-      // ----------------------------------------------------------
-
       const myThreadIds = new Set(
         participants
           .filter((p) => p.userId === userId)
           .map((p) => p.threadId)
       );
 
-      console.log(
-        "👤 Current user:",
-        userId
-      );
-
-      console.log(
-        "💬 User's thread count:",
-        myThreadIds.size
-      );
-
-      // ----------------------------------------------------------
-      // Find matching conversation
-      // ----------------------------------------------------------
-
       const needle = receiver.toLowerCase();
 
       const matched = myThreads.find((t) => {
-        // Only direct user-to-user chats
-        if (t.type !== "user_chat") {
-          return false;
-        }
+        if (t.type !== "user_chat") return false;
+        if (!myThreadIds.has(t.id)) return false;
 
-        // IMPORTANT:
-        // Ignore threads where current user is not a participant
-        if (!myThreadIds.has(t.id)) {
-          return false;
-        }
-
-        const members =
-          participantsByThread[t.id] || [];
-
-        // Find the other person
+        const members = participantsByThread[t.id] || [];
         const others = members.filter(
           (m) => m.userId !== userId
         );
 
-        if (others.length === 0) {
-          return false;
-        }
+        if (!others.length) return false;
 
         const other = others[0];
-
         const labels: string[] = [];
 
         if (other.displayName) {
@@ -250,9 +175,7 @@ export async function POST(req: Request) {
 
         if (other.email) {
           labels.push(other.email);
-          labels.push(
-            other.email.split("@")[0]
-          );
+          labels.push(other.email.split("@")[0]);
         }
 
         return labels.some((label) =>
@@ -260,27 +183,12 @@ export async function POST(req: Request) {
         );
       });
 
-      // ----------------------------------------------------------
-      // No matching thread
-      // ----------------------------------------------------------
-
       if (!matched) {
-        console.log(
-          "❌ No thread found for receiver:",
-          receiver
-        );
-
         reply = `No existing conversation found with "${receiver}".`;
       } else {
-        // --------------------------------------------------------
-        // Safety check:
-        // Make absolutely sure caller belongs to thread
-        // --------------------------------------------------------
-
         const meInThread = await db
           .select({
-            userId:
-              s.threadParticipants.userId,
+            userId: s.threadParticipants.userId,
           })
           .from(s.threadParticipants)
           .where(
@@ -297,19 +205,10 @@ export async function POST(req: Request) {
           )
           .limit(1);
 
-        if (meInThread.length === 0) {
-          console.log(
-            "🚫 Caller is not a participant on thread:",
-            matched.id
-          );
-
+        if (!meInThread.length) {
           reply =
             "You are not a participant in that conversation.";
         } else {
-          // ------------------------------------------------------
-          // Insert chat message
-          // ------------------------------------------------------
-
           const [mrow] = await db
             .insert(s.chatMessages)
             .values({
@@ -321,13 +220,8 @@ export async function POST(req: Request) {
             })
             .returning({
               id: s.chatMessages.id,
-              createdAt:
-                s.chatMessages.createdAt,
+              createdAt: s.chatMessages.createdAt,
             });
-
-          // ------------------------------------------------------
-          // Update thread timestamp
-          // ------------------------------------------------------
 
           await db
             .update(s.threads)
@@ -341,23 +235,10 @@ export async function POST(req: Request) {
               )
             );
 
-          // ------------------------------------------------------
-          // Get recipient display name
-          // ------------------------------------------------------
-
           const pretty =
-            participantsByThread[matched.id]
-              ?.find(
-                (p) => p.userId !== userId
-              )?.displayName ||
-            receiver;
-
-          console.log(
-            "✅ Sent message",
-            mrow?.id,
-            "to thread",
-            matched.id
-          );
+            participantsByThread[matched.id]?.find(
+              (p) => p.userId !== userId
+            )?.displayName || receiver;
 
           reply = `Sent to ${pretty}: ${msgContent}`;
         }
@@ -367,39 +248,22 @@ export async function POST(req: Request) {
       reminder = null;
     }
 
-    // ============================================================
-    // 5. REMINDER
-    // ============================================================
-
-    if (
-      intent === "reminder" &&
-      reminder
-    ) {
-      // Normalize structure names coming from FastAPI
-      const structured =
-        reminder.structured ?? reminder;
+    if (intent === "reminder" && reminder) {
+      const structured = reminder.structured ?? reminder;
 
       const title = (
         structured.title ?? "Reminder"
       ).toString();
 
-      const body =
-        structured.body ?? null;
+      const body = structured.body ?? null;
 
       const sourceTzNorm =
-        (
-          typeof structured.sourceTz ===
-            "string" &&
-          structured.sourceTz
-        ) ||
-        (
-          typeof sourceTz === "string" &&
-          sourceTz
-        ) ||
+        (typeof structured.sourceTz === "string" &&
+          structured.sourceTz) ||
+        (typeof sourceTz === "string" && sourceTz) ||
         "UTC";
 
-      // Accept multiple possible field names
-      const dueIso: string | null =
+      const dueIso =
         structured.dueAtUtc ??
         structured.due ??
         structured.whenUtc ??
@@ -407,63 +271,51 @@ export async function POST(req: Request) {
         structured.when ??
         null;
 
-      if (!dueIso) {
-        console.warn(
-          "⚠️ Reminder missing dueAtUtc/when — skipping insert"
-        );
-      } else {
+      if (dueIso) {
         const due = new Date(dueIso);
 
-        const [rem] = await db
-          .insert(s.reminders)
-          .values({
-            id: sql`gen_random_uuid()`,
-            userId,
+        if (!Number.isNaN(due.getTime())) {
+          const [rem] = await db
+            .insert(s.reminders)
+            .values({
+              id: sql`gen_random_uuid()`,
+              userId,
+              title,
+              body,
+              dueAtUtc: due,
+              sourceTz: sourceTzNorm,
+              status: "scheduled",
+              recurrenceRrule:
+                structured.recurrenceRrule ?? null,
+              channelPrefs:
+                structured.channelPrefs ?? null,
+              sourceMessageId:
+                userMsg?.id ?? null,
+            })
+            .returning();
+
+          reminder = {
+            id: rem.id,
             title,
             body,
-            dueAtUtc: due,
+            dueAtUtc: due.toISOString(),
             sourceTz: sourceTzNorm,
-            status: "scheduled",
             recurrenceRrule:
-              structured.recurrenceRrule ??
-              null,
+              structured.recurrenceRrule ?? null,
             channelPrefs:
-              structured.channelPrefs ??
-              null,
-            sourceMessageId:
-              userMsg?.id ?? null,
-          })
-          .returning();
+              structured.channelPrefs ?? null,
+          };
 
-        // Bubble reminder information to client
-        reminder = {
-          id: rem.id,
-          title,
-          body,
-          dueAtUtc: due.toISOString(),
-          sourceTz: sourceTzNorm,
-          recurrenceRrule:
-            structured.recurrenceRrule ??
-            null,
-          channelPrefs:
-            structured.channelPrefs ??
-            null,
-        };
-
-        // Default reply
-        if (!reply) {
-          const when =
-            new Date(due).toLocaleString();
-
-          reply =
-            `Reminder scheduled for ${when} (${sourceTzNorm}).`;
+          if (!reply) {
+            reply = `Reminder scheduled for ${due.toLocaleString()} (${sourceTzNorm}).`;
+          }
+        } else {
+          console.warn("Invalid reminder dueAtUtc:", dueIso);
         }
+      } else {
+        console.warn("Reminder missing dueAtUtc/when");
       }
     }
-
-    // ============================================================
-    // 6. SAVE ASSISTANT MESSAGE
-    // ============================================================
 
     await db.insert(s.messages).values({
       userId,
@@ -481,10 +333,6 @@ export async function POST(req: Request) {
           } as any),
     });
 
-    // ============================================================
-    // 7. RETURN RESPONSE
-    // ============================================================
-
     return new Response(
       JSON.stringify({
         reply,
@@ -500,16 +348,11 @@ export async function POST(req: Request) {
       }
     );
   } catch (e: any) {
-    console.error(
-      "🚨 Copilot chat error:",
-      e
-    );
+    console.error("Copilot chat error:", e);
 
     return new Response(
       JSON.stringify({
-        reply:
-          e?.message ||
-          "server error",
+        reply: e?.message || "server error",
       }),
       {
         status: 500,

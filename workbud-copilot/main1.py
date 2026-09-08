@@ -176,7 +176,6 @@ async def act(request: Request):
                 groq_url=GROQ_URL,
                 groq_model=GROQ_MODEL,
                 headers=HEADERS,
-                history=prior,
             )
 
             reply = out["reply"]
