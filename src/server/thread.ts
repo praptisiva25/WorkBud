@@ -53,9 +53,40 @@ export async function listMyThreads(userId: string) {
       updatedAt: schema.threads.updatedAt,
     })
     .from(schema.threadParticipants)
-    .innerJoin(schema.threads, eq(schema.threads.id, schema.threadParticipants.threadId))
+    .innerJoin(
+      schema.threads,
+      eq(schema.threads.id, schema.threadParticipants.threadId)
+    )
     .where(eq(schema.threadParticipants.userId, userId))
     .orderBy(desc(schema.threads.updatedAt));
 
-  return rows; // already flat
+  if (!rows.length) return rows;
+
+  const participantRows = await db
+    .select({
+      threadId: schema.threadParticipants.threadId,
+      userId: schema.threadParticipants.userId,
+      displayName: schema.users.displayName,
+    })
+    .from(schema.threadParticipants)
+    .innerJoin(
+      schema.users,
+      eq(schema.users.id, schema.threadParticipants.userId)
+    );
+
+  const namesByThread = new Map<string, string>();
+
+  for (const p of participantRows) {
+    if (p.userId !== userId && p.displayName) {
+      namesByThread.set(p.threadId, p.displayName);
+    }
+  }
+
+  return rows.map((t) => ({
+    ...t,
+    title:
+      t.type === "user_chat"
+        ? namesByThread.get(t.id) || t.title || "Direct message"
+        : t.title || "Group chat",
+  }));
 }

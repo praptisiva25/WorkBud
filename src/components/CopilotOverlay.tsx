@@ -8,6 +8,7 @@ type LocalMsg = {
   role: "user" | "assistant" | "system";
   text: string;
   time: string;
+  imageUrl?: string | null;
 };
 
 // Call FastAPI on localhost:8000
@@ -45,8 +46,8 @@ export default function CopilotOverlay({
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [items, setItems] = useState<LocalMsg[]>([
-    { id: "s1", role: "system", text: "Welcome to WorkBud.", time: timeStr() },
-    { id: "a1", role: "assistant", text: "What should I include in the standup note?", time: timeStr() },
+    { id: "s1", role: "system", text: "Welcome to WorkBud Copilot.", time: timeStr() },
+    { id: "a1", role: "assistant", text: "Hi! How can I help you today?", time: timeStr() },
   ]);
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -229,10 +230,17 @@ export default function CopilotOverlay({
 if (!res.ok) throw new Error(data?.reply || `HTTP ${res.status}`);
 
 const reply = data.reply || "(empty)";
+const imageUrl = data.image_url || null;
 
 setItems((prev) => [
   ...prev,
-  { id: crypto.randomUUID(), role: "assistant", text: reply, time: timeStr() },
+  {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    text: reply,
+    time: timeStr(),
+    imageUrl,
+  },
 ]);
 
     } catch (e: any) {
@@ -255,7 +263,7 @@ setItems((prev) => [
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between px-5 py-3 border-b border-white/10 bg-slate-900/70 backdrop-blur-2xl rounded-t-2xl">
           <div className="text-sm font-medium text-slate-100">
-            Standup notes • <span className="text-slate-300">Welcome to WorkBud</span>
+            Notes • <span className="text-slate-300">Welcome to WorkBud</span>
           </div>
           <div className="flex items-center gap-1.5">
             <button onClick={() => setPinned(!pinned)} className="p-1.5 rounded-md hover:bg-white/10" title={pinned ? "Unpin" : "Pin"}>
@@ -284,9 +292,17 @@ setItems((prev) => [
                   }`}
                 >
                   <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
-                  <div className={`mt-2 text-[10px] ${m.role === "user" ? "text-slate-900/60" : "text-slate-400"}`}>
-                    {m.time}
-                  </div>
+                  {m.imageUrl && (
+  <img
+    src={`http://localhost:8000${m.imageUrl}`}
+    alt="Generated chart"
+    className="mt-3 max-w-full rounded-lg border border-white/10"
+  />
+)}
+
+<div className={`mt-2 text-[10px] ${m.role === "user" ? "text-slate-900/60" : "text-slate-400"}`}>
+  {m.time}
+</div>
                 </div>
               </div>
             )

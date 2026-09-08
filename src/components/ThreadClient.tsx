@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Paperclip, Mic, Send } from "lucide-react";
-import { getSocket } from "@/lib/socket";
-import type { Msg } from "@/types/chat";
+import { getSocket } from "../lib/socket";
+import type { Msg } from "../types/chat";
 
 export default function ThreadClient({ threadId }: { threadId: string }) {
   const [items, setItems] = useState<Msg[]>([]);
@@ -105,7 +105,7 @@ export default function ThreadClient({ threadId }: { threadId: string }) {
                     isMe ? "text-slate-900/70" : "text-slate-400"
                   }`}
                 >
-                  {m.senderId} •{" "}
+                  {m.senderName || m.senderId} •{" "}
                   {new Date(m.createdAt).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",

@@ -21,7 +21,7 @@ load_dotenv()
 
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL   = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
 HEADERS      = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
 
@@ -136,7 +136,7 @@ async def act(request: Request):
         elif intent == "masking":
             # Expect ocr TXT path from frontend (saved by masking_agent earlier)
             #txt_path = body.get("txt_path") or body.get("ocr_txt_path")
-            txt_path = r"D:\projects\The one u want botany\workbud\workbud-copilot\ocr\27e72b17-7456-4d08-a8f5-b6d8a2101055__vit_2025_26_tuition_fees.pdf.txt"
+            txt_path = r"D:\projects\The one u want botany\workbud\workbud-copilot\ocr\7fdc8ccd-ec85-4141-a046-7bf95bf667e7__rec.png.txt"
 
             if not txt_path:
                 raise HTTPException(status_code=400, detail="Missing txt_path (OCR slim TXT)")
@@ -144,7 +144,7 @@ async def act(request: Request):
             out = await maskslm_agent(
                 user_prompt=text,
                 txt_path=txt_path,
-                image_path="D:\\projects\\The one u want botany\\workbud\\public\\uploads\\pii\\29311772-a4db-493b-853d-7b20ff4e636a__fees.png",
+                image_path="D:\\projects\\The one u want botany\\workbud\\public\\uploads\\pii\\3cdbd0f8-7bec-4220-87ee-a64783ebbb80__rec.png",
                 groq_url=GROQ_URL,
                 groq_model=GROQ_MODEL,
                 headers=HEADERS,

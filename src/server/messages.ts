@@ -71,6 +71,7 @@ export async function listMessages(opts: {
       id: schema.chatMessages.id,
       threadId: schema.chatMessages.threadId,
       senderId: schema.chatMessages.senderId,
+      senderName: schema.users.displayName,
       source: schema.chatMessages.source,
       kind: schema.chatMessages.kind,
       content: schema.chatMessages.content,
@@ -80,9 +81,13 @@ export async function listMessages(opts: {
       createdAt: schema.chatMessages.createdAt,
     })
     .from(schema.chatMessages)
+    .leftJoin(
+      schema.users,
+      eq(schema.users.id, schema.chatMessages.senderId)
+    )
     .where(eq(schema.chatMessages.threadId, threadId))
     .orderBy(desc(schema.chatMessages.createdAt))
     .limit(limit);
 
-  return rows.reverse(); // newest-last for UI
+  return rows.reverse();
 }

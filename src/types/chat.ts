@@ -10,6 +10,7 @@ export type Msg = {
   id: string;
   threadId: string;
   senderId: string;
+  senderName?: string | null;
   source: "manual" | "copilot" | "system";
   kind: "text" | "image" | "file";
   content: string | null;
